@@ -22,7 +22,9 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 if not app.config['SQLALCHEMY_DATABASE_URI']:
     raise RuntimeError("DATABASE_URL environment variable not set")
 
-
+# Initialize SQLAlchemy
+db = SQLAlchemy(app)
+                
 jwt = JWTManager(app)
 
 
