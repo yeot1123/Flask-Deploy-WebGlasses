@@ -5,7 +5,7 @@ from flask_jwt_extended import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
-import os
+
 
 from flask_cors import CORS
 
@@ -14,19 +14,10 @@ CORS(app)  # อนุญาต Cross-Origin สำหรับทุก request
 
 
 app.config['JWT_SECRET_KEY'] = 'glass'  # เปลี่ยนให้ปลอดภัย
-
-# โหลดค่า DATABASE_URL จาก Environment Variable
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
-
-# ตรวจสอบว่ามีการตั้งค่า DATABASE_URL หรือไม่
-if not app.config['SQLALCHEMY_DATABASE_URI']:
-    raise RuntimeError("DATABASE_URL environment variable not set")
-
-# Initialize SQLAlchemy
+# Database configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://blind-glasses-data_owner:zE8HmV4nIKiL@ep-lingering-bread-a17i0srx.ap-southeast-1.aws.neon.tech/blind-glasses-data?sslmode=require'
 db = SQLAlchemy(app)
-                
 jwt = JWTManager(app)
-
 
 # Model for storing location data
 class gps_data(db.Model):
@@ -168,7 +159,110 @@ def get_latest_location_by_id(gps_id):
 
     return jsonify(location_data), 200
 
+@app.route('/api/accounts', methods=['GET'])
+# @jwt_required()
+def get_accounts():
+    try:
+        # current_user = get_jwt_identity()  # ดึงข้อมูลผู้ใช้ปัจจุบันจาก JWT
+        users = User.query.all()  # ดึงข้อมูลทั้งหมดจากตาราง User
+
+        if not users:
+            # ถ้าไม่มีผู้ใช้ในฐานข้อมูล
+            return jsonify({
+                "message": "No users found."
+            }), 404
+
+        # สร้างรายการผู้ใช้
+        result = [{
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "password": user.password,
+            "role": user.role
+        } for user in users]
+
+        # ส่งผลลัพธ์กลับ
+        return jsonify({
+            # "message": "Successfully retrieved users.",
+            # "current_user": current_user,
+            "accounts": result
+        }), 200
+
+    except Exception as e:
+        # หากเกิดข้อผิดพลาดในการดึงข้อมูล
+        return jsonify({
+            "message": "Failed to retrieve users.",
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/accounts/<int:id>', methods=['PUT'])
+# @jwt_required()  # หากใช้ JWT, ยืนยันตัวตนผู้ใช้
+def update_account(id):
+    try:
+        # ดึงข้อมูลที่ส่งมาจากคำขอ (Request)
+        data = request.get_json()
+
+        # ค้นหาผู้ใช้ที่ต้องการอัปเดตจากฐานข้อมูล
+        user = User.query.get(id)
+
+        if not user:
+            return jsonify({
+                "message": "User not found."
+            }), 404
+
+        # อัปเดตข้อมูลผู้ใช้
+        user.username = data.get('username', user.username)
+        user.email = data.get('email', user.email)
+        user.password = data.get('password', user.password)
+        user.role = data.get('role', user.role)
+
+        # บันทึกการเปลี่ยนแปลง
+        db.session.commit()
+
+        return jsonify({
+            "message": "User updated successfully.",
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "role": user.role
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "message": "Failed to update user.",
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/accounts/<int:id>', methods=['DELETE'])
+# @jwt_required()  # หากใช้ JWT, ยืนยันตัวตนผู้ใช้
+def delete_account(id):
+    try:
+        # ค้นหาผู้ใช้ที่ต้องการลบจากฐานข้อมูล
+        user = User.query.get(id)
+
+        if not user:
+            return jsonify({
+                "message": "User not found."
+            }), 404
+
+        # ลบข้อมูลผู้ใช้
+        db.session.delete(user)
+        db.session.commit()
+
+        return jsonify({
+            "message": "User deleted successfully."
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "message": "Failed to delete user.",
+            "error": str(e)
+        }), 500
 
 
 if __name__ == "__main__":
-    app.run()
+    app.run(host='0.0.0.0', port=5001)
