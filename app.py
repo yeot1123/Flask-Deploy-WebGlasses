@@ -5,6 +5,7 @@ from flask_jwt_extended import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+from sqlalchemy import or_
 
 
 from flask_cors import CORS
@@ -78,12 +79,13 @@ def register():
 def login():
     data = request.get_json()
     print('Data is: ', data)
-    email = data.get('email')
+    identifier = data.get('identifier')  # รับทั้ง username หรือ email
     password = data.get('password')
 
-    user = User.query.filter_by(email=email).first()
+    # ค้นหาผู้ใช้โดย username หรือ email
+    user = User.query.filter(or_(User.email == identifier, User.username == identifier)).first()
     if not user or not check_password_hash(user.password, password):
-        return jsonify({"message": "Invalid email or password"}), 401
+        return jsonify({"message": "Invalid username/email or password"}), 401
 
     # สร้าง JWT Token พร้อม Role
     access_token = create_access_token(identity={"id": user.id, "role": user.role})
@@ -95,6 +97,7 @@ def login():
         "access_token": access_token,
         "role": user.role
     }), 200
+
     
 
 
