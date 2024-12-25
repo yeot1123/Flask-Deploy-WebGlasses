@@ -19,24 +19,25 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://blind-glasses-data_owner:z
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
 
-# Model for storing location data
+class User(db.Model):
+    __tablename__ = 'users'
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(255), unique=True, nullable=False)
+    email = db.Column(db.String(255), unique=True, nullable=False)
+    password = db.Column(db.String(255), nullable=False)
+    role = db.Column(db.String(20), nullable=False)  # 'admin' หรือ 'user'
+
+    # กำหนดความสัมพันธ์กับ gps_data
+    gps_records = db.relationship('gps_data', backref='user', cascade="all, delete", lazy=True)
+
 class gps_data(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     device_id = db.Column(db.String, nullable=False)
-    user_id = db.Column(db.Integer, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     latitude = db.Column(db.Float, nullable=False)
     longitude = db.Column(db.Float, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
-
-# เพิ่ม Model สำหรับผู้ใช้
-class User(db.Model):
-    __tablename__ = 'users'
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(255), unique = True, nullable=False)
-    email = db.Column(db.String(255), unique=True, nullable=False)
-    password = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(20), nullable=False)  # 'admin' หรือ 'user'
 
 
 @app.route('/api/register', methods=['POST'])
@@ -238,7 +239,6 @@ def update_account(id):
 
 
 @app.route('/api/accounts/<int:id>', methods=['DELETE'])
-# @jwt_required()  # หากใช้ JWT, ยืนยันตัวตนผู้ใช้
 def delete_account(id):
     try:
         # ค้นหาผู้ใช้ที่ต้องการลบจากฐานข้อมูล
@@ -249,7 +249,7 @@ def delete_account(id):
                 "message": "User not found."
             }), 404
 
-        # ลบข้อมูลผู้ใช้
+        # ลบผู้ใช้และข้อมูลที่เกี่ยวข้องใน gps_data
         db.session.delete(user)
         db.session.commit()
 
@@ -262,6 +262,7 @@ def delete_account(id):
             "message": "Failed to delete user.",
             "error": str(e)
         }), 500
+
 
 
 if __name__ == "__main__":
