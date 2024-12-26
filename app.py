@@ -21,7 +21,8 @@ CORS(app)  # อนุญาต Cross-Origin สำหรับทุก request
 
 # ตั้งค่า secret key และ database URI จาก environment variables
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI')
+app.config['DATABASE_URI'] = os.getenv('DATABASE_URI')
+
 
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
