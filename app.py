@@ -22,23 +22,13 @@ CORS(app)  # อนุญาต Cross-Origin สำหรับทุก request
 app.config['JWT_SECRET_KEY'] = 'glass'  # เปลี่ยนให้ปลอดภัย
 
 # โหลดค่า DATABASE_URL จาก Environment Variable
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
+app.config['SQLALCHEMY_DATABASE_URI'] = "postgresql://blind-glasses-data_owner:zE8HmV4nIKiL@ep-lingering-bread-a17i0srx.ap-southeast-1.aws.neon.tech/blind-glasses-data?sslmode=require"
 
 
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
 
 # Model for storing location data
-class gps_data(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    device_id = db.Column(db.String, nullable=False)
-    user_id = db.Column(db.Integer, nullable=False)
-    latitude = db.Column(db.Float, nullable=False)
-    longitude = db.Column(db.Float, nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-
-
-# เพิ่ม Model สำหรับผู้ใช้
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
@@ -50,6 +40,16 @@ class User(db.Model):
     # กำหนดความสัมพันธ์กับ gps_data
     gps_records = db.relationship('gps_data', backref='user', cascade="all, delete", lazy=True)
 
+class gps_data(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    device_id = db.Column(db.String, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    latitude = db.Column(db.Float, nullable=False)
+    longitude = db.Column(db.Float, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+    
 
 @app.route('/api/register', methods=['POST'])
 def register():
@@ -293,6 +293,8 @@ def delete_account(id):
             "message": "Failed to delete user.",
             "error": str(e)
         }), 500
+
+
 
 @app.route('/api/accounts', methods=['POST'])
 # @jwt_required()  # ใช้หากต้องการตรวจสอบ JWT
