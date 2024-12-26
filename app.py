@@ -6,7 +6,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from sqlalchemy import or_
-#from dotenv import load_dotenv
+from dotenv import load_dotenv
 import os
 from flask_cors import CORS
 
@@ -28,7 +28,17 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
 
+# Model for storing location data
+class gps_data(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    device_id = db.Column(db.String, nullable=False)
+    user_id = db.Column(db.Integer, nullable=False)
+    latitude = db.Column(db.Float, nullable=False)
+    longitude = db.Column(db.Float, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
+
+# เพิ่ม Model สำหรับผู้ใช้
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
@@ -39,15 +49,6 @@ class User(db.Model):
 
     # กำหนดความสัมพันธ์กับ gps_data
     gps_records = db.relationship('gps_data', backref='user', cascade="all, delete", lazy=True)
-
-class gps_data(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    device_id = db.Column(db.String, nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    latitude = db.Column(db.Float, nullable=False)
-    longitude = db.Column(db.Float, nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-
 
 
 @app.route('/api/register', methods=['POST'])
@@ -82,6 +83,25 @@ def register():
         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
 
 
+
+
+@app.route('/api/admin', methods=['GET'])
+# @jwt_required()  # ใช้ JWT ในการตรวจสอบว่าเป็นผู้ที่ล็อกอิน
+def admin():
+    # ดึงข้อมูลของผู้ใช้ที่ล็อกอินจาก JWT Token
+    current_user = get_jwt_identity()
+    
+    # ตรวจสอบว่า role ของผู้ใช้เป็น admin หรือไม่
+    if current_user["role"] != "admin":
+        return jsonify({"message": "Access denied. Admins only."}), 403
+
+    # ส่งข้อมูลเกี่ยวกับผู้ใช้ที่ล็อกอิน
+    return jsonify({
+        "message": "Welcome to the admin page",
+        "username": current_user["username"]
+    }), 200
+
+
 # Login Route
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -106,7 +126,6 @@ def login():
         "role": user.role,
         "username": user.username
     }), 200
-
     
 
 
@@ -208,7 +227,6 @@ def get_accounts():
             "error": str(e)
         }), 500
 
-
 @app.route('/api/accounts/<int:id>', methods=['PUT'])
 # @jwt_required()  # หากใช้ JWT, ยืนยันตัวตนผู้ใช้
 def update_account(id):
@@ -251,6 +269,7 @@ def update_account(id):
 
 
 @app.route('/api/accounts/<int:id>', methods=['DELETE'])
+# @jwt_required()  # หากใช้ JWT, ยืนยันตัวตนผู้ใช้
 def delete_account(id):
     try:
         # ค้นหาผู้ใช้ที่ต้องการลบจากฐานข้อมูล
@@ -261,7 +280,7 @@ def delete_account(id):
                 "message": "User not found."
             }), 404
 
-        # ลบผู้ใช้และข้อมูลที่เกี่ยวข้องใน gps_data
+        # ลบข้อมูลผู้ใช้
         db.session.delete(user)
         db.session.commit()
 
@@ -276,81 +295,6 @@ def delete_account(id):
         }), 500
 
 
-@app.route('/api/admin', methods=['GET'])
-# @jwt_required()  # ใช้ JWT ในการตรวจสอบว่าเป็นผู้ที่ล็อกอิน
-def admin():
-    # ดึงข้อมูลของผู้ใช้ที่ล็อกอินจาก JWT Token
-    current_user = get_jwt_identity()
-    
-    # ตรวจสอบว่า role ของผู้ใช้เป็น admin หรือไม่
-    if current_user["role"] != "admin":
-        return jsonify({"message": "Access denied. Admins only."}), 403
-
-    # ส่งข้อมูลเกี่ยวกับผู้ใช้ที่ล็อกอิน
-    return jsonify({
-        "message": "Welcome to the admin page",
-        "username": current_user["username"]
-    }), 200
-
-
-
-@app.route('/api/accounts', methods=['POST'])
-# @jwt_required()  # ใช้หากต้องการตรวจสอบ JWT
-def add_account():
-    try:
-        # ดึงข้อมูลจาก request body
-        data = request.get_json()
-
-        # ตรวจสอบว่าได้รับข้อมูลครบถ้วน
-        required_fields = ['username', 'email', 'password', 'role']
-        for field in required_fields:
-            if field not in data:
-                return jsonify({
-                    "message": f"Missing required field: {field}"
-                }), 400
-
-        # ตรวจสอบว่ามีผู้ใช้งานอยู่แล้วหรือไม่
-        existing_user = User.query.filter_by(email=data['email']).first()
-        if existing_user:
-            return jsonify({
-                "message": "User with this email already exists."
-            }), 409
-
-        # แฮชรหัสผ่านก่อนบันทึก
-        hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
-
-        # สร้างผู้ใช้ใหม่
-        new_user = User(
-            username=data['username'],
-            email=data['email'],
-            password=hashed_password,  # เก็บรหัสผ่านที่แฮชแล้ว
-            role=data['role']
-        )
-
-        # เพิ่มผู้ใช้ในฐานข้อมูล
-        db.session.add(new_user)
-        db.session.commit()
-
-        return jsonify({
-            "message": "User successfully added.",
-            "user": {
-                "id": new_user.id,
-                "username": new_user.username,
-                "email": new_user.email,
-                "role": new_user.role
-            }
-        }), 201
-
-    except Exception as e:
-        # หากเกิดข้อผิดพลาด
-        db.session.rollback()  # ย้อนกลับการเปลี่ยนแปลงในฐานข้อมูล
-        return jsonify({
-            "message": "Failed to add user.",
-            "error": str(e)
-        }), 500
-
-
-
 
 if __name__ == "__main__":
-    app.run()
+    app.run(host='0.0.0.0', port=5001)
