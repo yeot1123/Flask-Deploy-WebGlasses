@@ -294,7 +294,61 @@ def delete_account(id):
             "error": str(e)
         }), 500
 
+@app.route('/api/accounts', methods=['POST'])
+# @jwt_required()  # ใช้หากต้องการตรวจสอบ JWT
+def add_account():
+    try:
+        # ดึงข้อมูลจาก request body
+        data = request.get_json()
+
+        # ตรวจสอบว่าได้รับข้อมูลครบถ้วน
+        required_fields = ['username', 'email', 'password', 'role']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({
+                    "message": f"Missing required field: {field}"
+                }), 400
+
+        # ตรวจสอบว่ามีผู้ใช้งานอยู่แล้วหรือไม่
+        existing_user = User.query.filter_by(email=data['email']).first()
+        if existing_user:
+            return jsonify({
+                "message": "User with this email already exists."
+            }), 409
+
+        # แฮชรหัสผ่านก่อนบันทึก
+        hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
+
+        # สร้างผู้ใช้ใหม่
+        new_user = User(
+            username=data['username'],
+            email=data['email'],
+            password=hashed_password,  # เก็บรหัสผ่านที่แฮชแล้ว
+            role=data['role']
+        )
+
+        # เพิ่มผู้ใช้ในฐานข้อมูล
+        db.session.add(new_user)
+        db.session.commit()
+
+        return jsonify({
+            "message": "User successfully added.",
+            "user": {
+                "id": new_user.id,
+                "username": new_user.username,
+                "email": new_user.email,
+                "role": new_user.role
+            }
+        }), 201
+
+    except Exception as e:
+        # หากเกิดข้อผิดพลาด
+        db.session.rollback()  # ย้อนกลับการเปลี่ยนแปลงในฐานข้อมูล
+        return jsonify({
+            "message": "Failed to add user.",
+            "error": str(e)
+        }), 500
 
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5001)
+    app.run()
