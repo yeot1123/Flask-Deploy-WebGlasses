@@ -19,9 +19,10 @@ app = Flask(__name__)
 CORS(app)  # อนุญาต Cross-Origin สำหรับทุก request
 
 
-# ตั้งค่า secret key และ database URI จาก environment variables
-app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
-app.config['DATABASE_URI'] = os.getenv('DATABASE_URI')
+app.config['JWT_SECRET_KEY'] = 'glass'  # เปลี่ยนให้ปลอดภัย
+
+# โหลดค่า DATABASE_URL จาก Environment Variable
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 
 
 db = SQLAlchemy(app)
