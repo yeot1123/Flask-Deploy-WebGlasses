@@ -6,19 +6,26 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from sqlalchemy import or_
-
-
+from dotenv import load_dotenv
+import os
 from flask_cors import CORS
+
+
+# โหลด environment variables จากไฟล์ .env
+load_dotenv()
+
 
 app = Flask(__name__)
 CORS(app)  # อนุญาต Cross-Origin สำหรับทุก request
 
 
-app.config['JWT_SECRET_KEY'] = 'glass'  # เปลี่ยนให้ปลอดภัย
-# Database configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://blind-glasses-data_owner:zE8HmV4nIKiL@ep-lingering-bread-a17i0srx.ap-southeast-1.aws.neon.tech/blind-glasses-data?sslmode=require'
+# ตั้งค่า secret key และ database URI จาก environment variables
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI')
+
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
+
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -71,7 +78,6 @@ def register():
         db.session.rollback()
         print(f"Error occurred: {str(e)}")
         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
-
 
 
 # Login Route
