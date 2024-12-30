@@ -352,5 +352,58 @@ def add_account():
         }), 500
 
 
+        @app.route('/api/glasses-data', methods=['GET'])
+def get_glasses_data():
+    try:
+        # ดึงข้อมูลล่าสุดของแต่ละ user จาก gps_data
+        subquery = db.session.query(
+            gps_data.user_id,
+            db.func.max(gps_data.timestamp).label('max_timestamp')
+        ).group_by(gps_data.user_id).subquery()
+
+        # Join กับตาราง users และข้อมูล GPS ล่าสุด
+        results = db.session.query(
+            User.id,
+            User.username,
+            User.email,
+            gps_data.latitude,
+            gps_data.longitude,
+            # ในที่นี้สมมติว่าใช้ device_id เป็นค่าแบตเตอรี่ (คุณอาจต้องปรับตามโครงสร้างจริง)
+            gps_data.device_id.label('battery_level')
+        ).join(
+            subquery,
+            User.id == subquery.c.user_id
+        ).join(
+            gps_data,
+            db.and_(
+                gps_data.user_id == subquery.c.user_id,
+                gps_data.timestamp == subquery.c.max_timestamp
+            )
+        ).all()
+
+        # แปลงผลลัพธ์เป็นรูปแบบที่ต้องการ
+        glasses_data = []
+        for result in results:
+            glasses_data.append({
+                'id': result.id,
+                'username': result.username,
+                'email': result.email,
+                # แปลง device_id เป็นค่าแบตเตอรี่ (ตัวอย่าง)
+                'battery': int(float(result.battery_level)) if result.battery_level.replace('.', '').isdigit() else 0,
+                'location': f'Lat: {result.latitude}, Long: {result.longitude}'
+            })
+
+        return jsonify({
+            'status': 'success',
+            'data': glasses_data
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
 if __name__ == "__main__":
     app.run()
