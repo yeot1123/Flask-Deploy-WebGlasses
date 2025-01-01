@@ -352,7 +352,7 @@ def add_account():
         }), 500
 
 
-        @app.route('/api/glasses-data', methods=['GET'])
+@app.route('/api/glasses-data', methods=['GET'])
 def get_glasses_data():
     try:
         # ดึงข้อมูลล่าสุดของแต่ละ user จาก gps_data
