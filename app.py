@@ -172,7 +172,7 @@ def get_latest_location_by_id(gps_id):
         return jsonify({"message": "Unauthorized"}), 401
 
     # ตรวจสอบว่า gps_id ที่ค้นหาเป็นของ user_id ที่ล็อกอินอยู่
-    device = Device.query.filter_by(device_id=gps_id, user_id=current_user.id).first()
+    device = gps_data.query.filter_by(device_id=gps_id, user_id=current_user.id).first()
     if not device:
         return jsonify({"message": "Access denied: You do not own this device"}), 403
 
