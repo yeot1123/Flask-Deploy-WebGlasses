@@ -115,6 +115,7 @@ def login():
     if not user or not check_password_hash(user.password, password):
         return jsonify({"message": "Invalid username/email or password"}), 401
 
+
     # สร้าง JWT Token พร้อม Role
     access_token = create_access_token(identity={"id": user.id, "role": user.role, "username": user.username})
     
@@ -148,12 +149,36 @@ def receive_location():
     return jsonify({"message": "Data received"}), 200
 
 
-# API endpoint to get the latest location by gps_id
+def get_current_user():
+    # สมมติว่าคุณใช้ JWT สำหรับการล็อกอิน
+    token = request.headers.get("Authorization")
+    if not token:
+        return None
+
+    try:
+        # Decode JWT เพื่อดึงข้อมูลผู้ใช้
+        data = jwt.decode(token, app.config["SECRET_KEY"], algorithms=["HS256"])
+        return User.query.filter_by(id=data["user_id"]).first()
+    except Exception:
+        return None
+
+
 @app.route('/api/Getlocations/<int:gps_id>', methods=['GET'])
 def get_latest_location_by_id(gps_id):
-    
+    # Get user information from the current session or token
+    current_user = get_current_user()  # ฟังก์ชันนี้ควรคืนค่าผู้ใช้ที่ล็อกอินอยู่
+
+    if not current_user:
+        return jsonify({"message": "Unauthorized"}), 401
+
+    # ตรวจสอบว่า gps_id ที่ค้นหาเป็นของ user_id ที่ล็อกอินอยู่
+    device = Device.query.filter_by(device_id=gps_id, user_id=current_user.id).first()
+    if not device:
+        return jsonify({"message": "Access denied: You do not own this device"}), 403
+
+    # Get the latest location for the device
     latest_location = (
-        gps_data.query.filter_by(user_id=gps_id)
+        gps_data.query.filter_by(device_id=gps_id)
         .order_by(gps_data.timestamp.desc())
         .first()
     )
@@ -161,35 +186,20 @@ def get_latest_location_by_id(gps_id):
     if not latest_location:
         return jsonify({"message": "No data found for this GPS ID"}), 404
 
-    # Query user information based on device_id or user_id (adjust based on your schema)
-    user = User.query.filter_by(id=latest_location.user_id).first()
-    if not user:
-        return jsonify({"message": "User not found"}), 404
-
-    print(user)
-    # Check role
-    if user.role != 'user':
-        return jsonify({
-            "message": "Access denied for this role",
-            "role": user.role,  # เพิ่ม role เพื่อตรวจสอบฝั่ง Frontend
-            "username": user.username  # เพิ่ม username เพื่อตรวจสอบได้ชัดเจนขึ้น
-        }), 403
-
-    print(user)
-
     # Prepare response
     location_data = {
         "latitude": latest_location.latitude,
         "longitude": latest_location.longitude,
-        "user_id": user.id,
-        "username": user.username,  # ส่ง username ไปด้วย
-        "role": user.role,
+        "device_id": device.device_id,
+        "user_id": current_user.id,
+        "username": current_user.username,  # ส่ง username ไปด้วย
+        "role": current_user.role,
         "timestamp": latest_location.timestamp,
     }
-    
-    print(location_data)
 
     return jsonify(location_data), 200
+
+
 
 @app.route('/api/accounts', methods=['GET'])
 # @jwt_required()
