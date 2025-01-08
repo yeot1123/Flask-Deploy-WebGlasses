@@ -189,7 +189,7 @@ def get_latest_location_by_device_id(device_id):
 
 
 @app.route('/api/accounts', methods=['GET'])
-# @jwt_required()
+@jwt_required()
 def get_accounts():
     try:
         # current_user = get_jwt_identity()  # ดึงข้อมูลผู้ใช้ปัจจุบันจาก JWT
@@ -225,7 +225,7 @@ def get_accounts():
         }), 500
 
 @app.route('/api/accounts/<int:id>', methods=['PUT'])
-# @jwt_required()  # หากใช้ JWT, ยืนยันตัวตนผู้ใช้
+@jwt_required()  # หากใช้ JWT, ยืนยันตัวตนผู้ใช้
 def update_account(id):
     try:
         # ดึงข้อมูลที่ส่งมาจากคำขอ (Request)
@@ -266,7 +266,7 @@ def update_account(id):
 
 
 @app.route('/api/accounts/<int:id>', methods=['DELETE'])
-# @jwt_required()  # หากใช้ JWT, ยืนยันตัวตนผู้ใช้
+@jwt_required()  # หากใช้ JWT, ยืนยันตัวตนผู้ใช้
 def delete_account(id):
     try:
         # ค้นหาผู้ใช้ที่ต้องการลบจากฐานข้อมูล
@@ -294,7 +294,7 @@ def delete_account(id):
 
 
 @app.route('/api/accounts', methods=['POST'])
-# @jwt_required()  # ใช้หากต้องการตรวจสอบ JWT
+@jwt_required()  # ใช้หากต้องการตรวจสอบ JWT
 def add_account():
     try:
         # ดึงข้อมูลจาก request body
