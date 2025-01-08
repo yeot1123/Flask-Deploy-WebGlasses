@@ -166,13 +166,7 @@ def get_latest_location_by_device_id(device_id):
     user_id = get_current_user_id()  # ฟังก์ชันนี้ควรดึง user_id จาก token
 
     print(user_id)
-
     
-    # ตรวจสอบว่า user มีสิทธิ์เข้าถึง device_id นี้หรือไม่
-    has_access = UserDeviceAccess.query.filter_by(user_id=user_id, device_id=device_id).first()
-    if not has_access:
-        return jsonify({"message": "You do not have access to this device ID"}), 403
-
     # ตรวจสอบว่า user มีสิทธิ์เข้าถึง device_id นี้หรือไม่
     has_access = UserDeviceAccess.query.filter_by(user_id=user_id, device_id=device_id).first()
     if not has_access:
