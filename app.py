@@ -134,7 +134,6 @@ def login():
         "access_token": access_token,
         "role": user.role,
         "username": user.username,
-        "user_id": user.user_id
     }), 200
     
 
