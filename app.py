@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import os
 from flask_cors import CORS
 from datetime import timedelta
+import json
 
 # โหลด environment variables จากไฟล์ .env
 # load_dotenv()
@@ -121,10 +122,10 @@ def login():
     if not user or not check_password_hash(user.password, password):
         return jsonify({"message": "Invalid username/email or password"}), 401
 
-# สร้าง Token พร้อมตั้งค่า expiration
+    # แปลงข้อมูล identity เป็น JSON String
     access_token = create_access_token(
-                identity={"id": user.id, "role": user.role, "username": user.username}, 
-                expires_delta=timedelta(hours=1)  # Token จะหมดอายุใน 1 ชั่วโมง
+        identity=json.dumps({"id": user.id, "role": user.role, "username": user.username}),
+        expires_delta=timedelta(hours=1)  # Token จะหมดอายุใน 1 ชั่วโมง
     )
 
     return jsonify({
@@ -157,11 +158,11 @@ def receive_location():
 
 
 @app.route('/api/Getlocations/<string:device_id>', methods=['GET'])
-@jwt_required()  # Uncomment ถ้าคุณใช้ JWT
+@jwt_required()
 def get_latest_location_by_device_id(device_id):
-    # ดึง user ที่กำลังร้องขอ (กรณีใช้ JWT)
-    user_id = get_jwt_identity()  # ฟังก์ชันนี้ควรดึง user_id จาก token
-
+    # Decode JWT identity
+    identity = json.loads(get_jwt_identity())
+    user_id = identity.get("id")  # ดึง user_id จาก identity
     print(user_id)
 
     # ตรวจสอบว่า user มีสิทธิ์เข้าถึง device_id นี้หรือไม่
@@ -170,7 +171,7 @@ def get_latest_location_by_device_id(device_id):
         return jsonify({"message": "You do not have access to this device ID"}), 403
 
     # ดึง role ของ user
-    user_role = access.user.role  # ดึง role ผ่าน relationship
+    user_role = access.user.role
 
     # ดึงตำแหน่งล่าสุดจาก gps_data
     latest_location = (
@@ -187,7 +188,7 @@ def get_latest_location_by_device_id(device_id):
         "latitude": latest_location.latitude,
         "longitude": latest_location.longitude,
         "timestamp": latest_location.timestamp,
-        "role": user_role,  # เพิ่ม role ใน response
+        "role": user_role,
     }
 
     return jsonify(location_data), 200
