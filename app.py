@@ -28,6 +28,15 @@ app.config['SQLALCHEMY_DATABASE_URI'] = "postgresql://blind-glasses-data_owner:z
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
 
+class UserDeviceAccess(db.Model):
+    __tablename__ = 'user_device_access'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    device_id = db.Column(db.String, nullable=False)
+
+    user = db.relationship('User', backref='device_access')
+
+
 # Model for storing location data
 class User(db.Model):
     __tablename__ = 'users'
@@ -106,21 +115,17 @@ def admin():
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
-    print('Data is: ', data)
-    identifier = data.get('identifier')  # รับทั้ง username หรือ email
+    identifier = data.get('identifier')
     password = data.get('password')
 
-    # ค้นหาผู้ใช้โดย username หรือ email
+    # ค้นหาผู้ใช้
     user = User.query.filter(or_(User.email == identifier, User.username == identifier)).first()
     if not user or not check_password_hash(user.password, password):
         return jsonify({"message": "Invalid username/email or password"}), 401
 
-
-    # สร้าง JWT Token พร้อม Role
+    # สร้าง JWT Token
     access_token = create_access_token(identity={"id": user.id, "role": user.role, "username": user.username})
-    
-    print(access_token)
-    
+
     return jsonify({
         "message": "Login successful",
         "access_token": access_token,
@@ -149,56 +154,40 @@ def receive_location():
     return jsonify({"message": "Data received"}), 200
 
 
-def get_current_user():
-    # สมมติว่าคุณใช้ JWT สำหรับการล็อกอิน
-    token = request.headers.get("Authorization")
-    if not token:
-        return None
+def get_current_user_id():
+    # ดึง user_id ที่เก็บใน JWT Token
+    return get_jwt_identity()
 
-    try:
-        # Decode JWT เพื่อดึงข้อมูลผู้ใช้
-        data = jwt.decode(token, app.config["SECRET_KEY"], algorithms=["HS256"])
-        return User.query.filter_by(id=data["user_id"]).first()
-    except Exception:
-        return None
+# API endpoint to get the latest location by gps_id
+@app.route('/api/Getlocations/<string:device_id>', methods=['GET'])
+@jwt_required()
+def get_latest_location_by_device_id(device_id):
+    # ดึง user ที่กำลังทำการร้องขอ (สมมติว่าคุณใช้ token-based authentication)
+    user_id = get_current_user_id()  # ฟังก์ชันนี้ควรดึง user_id จาก token
 
+    # ตรวจสอบว่า user มีสิทธิ์เข้าถึง device_id นี้หรือไม่
+    has_access = UserDeviceAccess.query.filter_by(user_id=user_id, device_id=device_id).first()
+    if not has_access:
+        return jsonify({"message": "You do not have access to this device ID"}), 403
 
-@app.route('/api/Getlocations/<int:gps_id>', methods=['GET'])
-def get_latest_location_by_id(gps_id):
-    # Get user information from the current session or token
-    current_user = get_current_user()  # ฟังก์ชันนี้ควรคืนค่าผู้ใช้ที่ล็อกอินอยู่
-
-    if not current_user:
-        return jsonify({"message": "Unauthorized"}), 401
-
-    # ตรวจสอบว่า gps_id ที่ค้นหาเป็นของ user_id ที่ล็อกอินอยู่
-    device = gps_data.query.filter_by(device_id=gps_id, user_id=current_user.id).first()
-    if not device:
-        return jsonify({"message": "Access denied: You do not own this device"}), 403
-
-    # Get the latest location for the device
+    # ดึงตำแหน่งล่าสุดจาก gps_data
     latest_location = (
-        gps_data.query.filter_by(device_id=gps_id)
+        gps_data.query.filter_by(device_id=device_id)
         .order_by(gps_data.timestamp.desc())
         .first()
     )
 
     if not latest_location:
-        return jsonify({"message": "No data found for this GPS ID"}), 404
+        return jsonify({"message": "No data found for this device ID"}), 404
 
     # Prepare response
     location_data = {
         "latitude": latest_location.latitude,
         "longitude": latest_location.longitude,
-        "device_id": device.device_id,
-        "user_id": current_user.id,
-        "username": current_user.username,  # ส่ง username ไปด้วย
-        "role": current_user.role,
         "timestamp": latest_location.timestamp,
     }
 
     return jsonify(location_data), 200
-
 
 
 @app.route('/api/accounts', methods=['GET'])
@@ -362,6 +351,7 @@ def add_account():
         }), 500
 
 
+# หน้า TABLE For ADMIN
 @app.route('/api/glasses-data', methods=['GET'])
 def get_glasses_data():
     try:
