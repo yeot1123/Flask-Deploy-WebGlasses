@@ -140,20 +140,42 @@ def login():
 # API endpoint to receive data
 @app.route('/api/locations', methods=['POST'])
 def receive_location():
-    data = request.json
-    timestamp = datetime.utcnow()
+    try:
+        data = request.json
+        if not all(key in data for key in ('user_id', 'device_id', 'latitude', 'longitude')):
+            return jsonify({"message": "Missing required fields"}), 400
+        
+        timestamp = datetime.utcnow()
 
+        # ตรวจสอบ user_device_access
+        user_device = UserDeviceAccess.query.filter_by(
+            user_id=data['user_id'], 
+            device_id=data['device_id']
+        ).first()
 
-    location = gps_data(
-        device_id=data['device_id'],
-        latitude=data['latitude'],
-        longitude=data['longitude'],
-        timestamp=timestamp,
-        user_id=data['user_id'],
-    )
-    db.session.add(location)
-    db.session.commit()
-    return jsonify({"message": "Data received"}), 200
+        if not user_device:
+            user_device = UserDeviceAccess(
+                user_id=data['user_id'], 
+                device_id=data['device_id']
+            )
+            db.session.add(user_device)
+
+        # เพิ่มตำแหน่งใหม่
+        location = gps_data(
+            device_id=data['device_id'],
+            latitude=data['latitude'],
+            longitude=data['longitude'],
+            timestamp=timestamp,
+            user_id=data['user_id'],
+        )
+        db.session.add(location)
+        db.session.commit()
+
+        return jsonify({"message": "Data received"}), 200
+
+    except Exception as e:
+        return jsonify({"message": f"An error occurred: {str(e)}"}), 500
+
 
 
 
