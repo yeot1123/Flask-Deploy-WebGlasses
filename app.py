@@ -154,16 +154,12 @@ def receive_location():
     return jsonify({"message": "Data received"}), 200
 
 
-def get_current_user_id():
-    # ดึง user_id ที่เก็บใน JWT Token
-    return get_jwt_identity()
 
 # API endpoint to get the latest location by gps_id
 @app.route('/api/Getlocations/<string:device_id>', methods=['GET'])
-@jwt_required()
 def get_latest_location_by_device_id(device_id):
     # ดึง user ที่กำลังทำการร้องขอ (สมมติว่าคุณใช้ token-based authentication)
-    user_id = get_current_user_id()  # ฟังก์ชันนี้ควรดึง user_id จาก token
+    user_id = get_jwt_identity()  # ฟังก์ชันนี้ควรดึง user_id จาก token
 
     print(user_id)
     
