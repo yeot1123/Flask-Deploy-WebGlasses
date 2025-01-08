@@ -156,19 +156,21 @@ def receive_location():
 
 
 
-# API endpoint to get the latest location by gps_id
 @app.route('/api/Getlocations/<string:device_id>', methods=['GET'])
-#@jwt_required()  # เพิ่ม decorator นี้
+@jwt_required()  # Uncomment ถ้าคุณใช้ JWT
 def get_latest_location_by_device_id(device_id):
-    # ดึง user ที่กำลังทำการร้องขอ (สมมติว่าคุณใช้ token-based authentication)
+    # ดึง user ที่กำลังร้องขอ (กรณีใช้ JWT)
     user_id = get_jwt_identity()  # ฟังก์ชันนี้ควรดึง user_id จาก token
 
     print(user_id)
-    
+
     # ตรวจสอบว่า user มีสิทธิ์เข้าถึง device_id นี้หรือไม่
-    has_access = UserDeviceAccess.query.filter_by(user_id=user_id, device_id=device_id).first()
-    if not has_access:
+    access = UserDeviceAccess.query.filter_by(user_id=user_id, device_id=device_id).first()
+    if not access:
         return jsonify({"message": "You do not have access to this device ID"}), 403
+
+    # ดึง role ของ user
+    user_role = access.user.role  # ดึง role ผ่าน relationship
 
     # ดึงตำแหน่งล่าสุดจาก gps_data
     latest_location = (
@@ -185,9 +187,11 @@ def get_latest_location_by_device_id(device_id):
         "latitude": latest_location.latitude,
         "longitude": latest_location.longitude,
         "timestamp": latest_location.timestamp,
+        "role": user_role,  # เพิ่ม role ใน response
     }
 
     return jsonify(location_data), 200
+
 
 
 @app.route('/api/accounts', methods=['GET'])
