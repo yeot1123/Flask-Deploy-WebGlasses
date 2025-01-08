@@ -95,7 +95,7 @@ def register():
 
 
 @app.route('/api/admin', methods=['GET'])
-# @jwt_required()  # ใช้ JWT ในการตรวจสอบว่าเป็นผู้ที่ล็อกอิน
+@jwt_required()  # ใช้ JWT ในการตรวจสอบว่าเป็นผู้ที่ล็อกอิน
 def admin():
     # ดึงข้อมูลของผู้ใช้ที่ล็อกอินจาก JWT Token
     current_user = get_jwt_identity()
