@@ -57,7 +57,13 @@ class gps_data(db.Model):
     longitude = db.Column(db.Float, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
+class UserDeviceAccess(db.Model):
+    __tablename__ = 'user_device_access'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    device_id = db.Column(db.String, nullable=False)
 
+    user = db.relationship('User', backref='device_access')
     
 
 @app.route('/api/register', methods=['POST'])
