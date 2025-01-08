@@ -158,7 +158,7 @@ def receive_location():
 
 # API endpoint to get the latest location by gps_id
 @app.route('/api/Getlocations/<string:device_id>', methods=['GET'])
-@jwt_required()  # เพิ่ม decorator นี้
+#@jwt_required()  # เพิ่ม decorator นี้
 def get_latest_location_by_device_id(device_id):
     # ดึง user ที่กำลังทำการร้องขอ (สมมติว่าคุณใช้ token-based authentication)
     user_id = get_jwt_identity()  # ฟังก์ชันนี้ควรดึง user_id จาก token
