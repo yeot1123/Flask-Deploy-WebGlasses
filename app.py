@@ -9,7 +9,7 @@ from sqlalchemy import or_
 from dotenv import load_dotenv
 import os
 from flask_cors import CORS
-
+from datetime import timedelta
 
 # โหลด environment variables จากไฟล์ .env
 # load_dotenv()
@@ -123,9 +123,12 @@ def login():
     if not user or not check_password_hash(user.password, password):
         return jsonify({"message": "Invalid username/email or password"}), 401
 
-    # สร้าง JWT Token
-    access_token = create_access_token(identity={"id": user.id, "role": user.role, "username": user.username})
-
+# สร้าง Token พร้อมตั้งค่า expiration
+    access_token = create_access_token(
+                identity={"id": user.id, "role": user.role, "username": user.username}, 
+                expires_delta=timedelta(hours=1)  # Token จะหมดอายุใน 1 ชั่วโมง
+    )
+    
     return jsonify({
         "message": "Login successful",
         "access_token": access_token,
