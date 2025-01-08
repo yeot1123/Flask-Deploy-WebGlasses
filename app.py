@@ -128,12 +128,13 @@ def login():
                 identity={"id": user.id, "role": user.role, "username": user.username}, 
                 expires_delta=timedelta(hours=1)  # Token จะหมดอายุใน 1 ชั่วโมง
     )
-    
+
     return jsonify({
         "message": "Login successful",
         "access_token": access_token,
         "role": user.role,
-        "username": user.username
+        "username": user.username,
+        "user_id": user.user_id
     }), 200
     
 
