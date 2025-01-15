@@ -179,48 +179,62 @@ def receive_location():
 
 
 
-@app.route('/api/Getlocations', methods=['GET'])
+@app.route('/api/Getlocations/<string:device_id>', methods=['GET'])
 @jwt_required()
-def get_device_locations():
+def get_latest_location_by_device_id(device_id):
     # Decode JWT identity
     identity = json.loads(get_jwt_identity())
-    user_id = identity.get("id")
+    user_id = identity.get("id")  # ดึง user_id จาก identity
+    print(user_id)
 
-    # ดึงรายการ device_id ทั้งหมดที่ user_id มีสิทธิ์เข้าถึง
-    access_devices = UserDeviceAccess.query.filter_by(user_id=user_id).all()
-    if not access_devices:
-        return jsonify({"message": "You do not have access to any device IDs"}), 403
+    # ตรวจสอบว่า user มีสิทธิ์เข้าถึง device_id นี้หรือไม่
+    access = UserDeviceAccess.query.filter_by(user_id=user_id, device_id=device_id).first()
+    if not access:
+        return jsonify({"message": "You do not have access to this device ID"}), 403
 
-    device_ids = [access.device_id for access in access_devices]
+    # ดึง role ของ user
+    user_role = access.user.role
 
-    # ตรวจสอบว่า query parameter มีการส่ง `device_id` หรือไม่
-    device_id = request.args.get('device_id')
+    # ดึงตำแหน่งล่าสุดจาก gps_data
+    latest_location = (
+        gps_data.query.filter_by(device_id=device_id)
+        .order_by(gps_data.timestamp.desc())
+        .first()
+    )
 
-    if device_id:
-        # ตรวจสอบสิทธิ์
-        if device_id not in device_ids:
-            return jsonify({"message": "You do not have access to this device ID"}), 403
+    if not latest_location:
+        return jsonify({"message": "No data found for this device ID"}), 404
 
-        # ดึงตำแหน่งล่าสุด
-        latest_location = (
-            gps_data.query.filter_by(device_id=device_id)
-            .order_by(gps_data.timestamp.desc())
-            .first()
-        )
+    # Prepare response
+    location_data = {
+        "latitude": latest_location.latitude,
+        "longitude": latest_location.longitude,
+        "timestamp": latest_location.timestamp,
+        "role": user_role,
+    }
 
-        if not latest_location:
-            return jsonify({"message": "No data found for this device ID"}), 404
+    return jsonify(location_data), 200
 
-        # Response ข้อมูลตำแหน่งล่าสุด
-        return jsonify({
-            "device_id": device_id,
-            "latitude": latest_location.latitude,
-            "longitude": latest_location.longitude,
-            "timestamp": latest_location.timestamp,
-        }), 200
 
-    # ถ้าไม่มี `device_id` ส่งคืนรายการทั้งหมด
+## API For Who you can search
+@app.route('/api/GetAccessibleDevices', methods=['GET'])
+@jwt_required()
+def get_accessible_devices():
+    # Decode JWT identity
+    identity = json.loads(get_jwt_identity())
+    user_id = identity.get("id")  # ดึง user_id จาก JWT identity
+
+    # ดึง device_id ทั้งหมดที่ user_id นี้สามารถเข้าถึงได้
+    devices = UserDeviceAccess.query.filter_by(user_id=user_id).all()
+
+    if not devices:
+        return jsonify({"device_ids": []}), 200
+
+    # สร้าง list ของ device_id
+    device_ids = [device.device_id for device in devices]
+
     return jsonify({"device_ids": device_ids}), 200
+
 
 
 
