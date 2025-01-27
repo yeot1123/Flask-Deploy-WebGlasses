@@ -64,7 +64,7 @@ class DeviceData(db.Model):
     __tablename__ = 'device_data'
 
     id = db.Column(db.Integer, primary_key=True)  # id SERIAL PRIMARY KEY
-    device_id = db.Column(db.Integer, nullable=False)  # device_id INTEGER NOT NULL
+    device_id = db.Column(db.String, nullable=False)  # device_id INTEGER NOT NULL
     battery = db.Column(db.Numeric(5, 2), nullable=False)  # battery NUMERIC(5, 2) NOT NULL
     temp = db.Column(db.Numeric(5, 2), nullable=False)  # temp NUMERIC(5, 2) NOT NULL
     recorded_at = db.Column(db.DateTime, default=datetime.utcnow)  # recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
