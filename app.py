@@ -58,6 +58,8 @@ class gps_data(db.Model):
     longitude = db.Column(db.Float, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # สร้างความสัมพันธ์กลับไปที่ device_data
+    device_data = db.relationship("DeviceData", back_populates="gps_data")
 
 # Device_data 
 class DeviceData(db.Model):
