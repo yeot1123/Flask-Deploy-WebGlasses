@@ -39,6 +39,7 @@ class UserDeviceAccess(db.Model):
 
 
 # Model for storing location data
+# Model สำหรับผู้ใช้
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
@@ -47,12 +48,14 @@ class User(db.Model):
     password = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False)  # 'admin' หรือ 'user'
 
-    # กำหนดความสัมพันธ์กับ gps_data
-    gps_records = db.relationship('gps_data', backref='user', cascade="all, delete", lazy=True)
+    # ความสัมพันธ์กับ gps_data (ผู้ใช้แต่ละคนสามารถมีหลายอุปกรณ์)
+    gps_records = db.relationship('GpsData', backref='user', cascade="all, delete", lazy=True)
 
+# Model สำหรับพิกัด GPS
 class gps_data(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    device_id = db.Column(db.String, nullable=False)
+    __tablename__ = 'gps_data'
+    
+    device_id = db.Column(db.String(50), primary_key=True)  # ใช้เป็น PRIMARY KEY
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     latitude = db.Column(db.Float, nullable=False)
     longitude = db.Column(db.Float, nullable=False)
@@ -185,38 +188,38 @@ def receive_location():
 @app.route('/api/Getlocations/<string:device_id>', methods=['GET'])
 @jwt_required()
 def get_latest_location_by_device_id(device_id):
-    # Decode JWT identity
-    identity = json.loads(get_jwt_identity())
-    user_id = identity.get("id")  # ดึง user_id จาก identity
-    print(user_id)
+    try:
+        # Decode JWT identity
+        identity = json.loads(get_jwt_identity())
+        user_id = identity.get("id")  # ดึง user_id จาก identity
 
-    # ตรวจสอบว่า user มีสิทธิ์เข้าถึง device_id นี้หรือไม่
-    access = UserDeviceAccess.query.filter_by(user_id=user_id, device_id=device_id).first()
-    if not access:
-        return jsonify({"message": "You do not have access to this device ID"}), 403
+        # ตรวจสอบสิทธิ์ของ user กับ device_id
+        access = UserDeviceAccess.query.filter_by(user_id=user_id, device_id=device_id).first()
+        if not access:
+            return jsonify({"message": "You do not have access to this device ID"}), 403
 
-    # ดึง role ของ user
-    user_role = access.user.role
+        # ดึง role ของ user
+        user_role = access.user.role
 
-    # ดึงตำแหน่งล่าสุดจาก gps_data
-    latest_location = (
-        gps_data.query.filter_by(device_id=device_id)
-        .order_by(gps_data.timestamp.desc())
-        .first()
-    )
+        # ดึงตำแหน่งล่าสุดจาก gps_data
+        latest_location = gps_data.query.get(device_id)  # ใช้ get() เพราะ device_id เป็น PRIMARY KEY
 
-    if not latest_location:
-        return jsonify({"message": "No data found for this device ID"}), 404
+        if not latest_location:
+            return jsonify({"message": "No data found for this device ID"}), 404
 
-    # Prepare response
-    location_data = {
-        "latitude": latest_location.latitude,
-        "longitude": latest_location.longitude,
-        "timestamp": latest_location.timestamp,
-        "role": user_role,
-    }
+        # Prepare response
+        location_data = {
+            "device_id": device_id,
+            "latitude": latest_location.latitude,
+            "longitude": latest_location.longitude,
+            "timestamp": latest_location.timestamp.isoformat(),  # แปลง timestamp ให้ JSON อ่านได้
+            "role": user_role,
+        }
 
-    return jsonify(location_data), 200
+        return jsonify(location_data), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 ## API For Who you can search
