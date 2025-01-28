@@ -58,6 +58,23 @@ class gps_data(db.Model):
     longitude = db.Column(db.Float, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # สร้างความสัมพันธ์กลับไปที่ device_data
+    device_data = db.relationship("DeviceData", back_populates="gps_data")
+
+# Device_data 
+class DeviceData(db.Model):
+    __tablename__ = 'device_data'
+
+    id = db.Column(db.Integer, primary_key=True)  # id SERIAL PRIMARY KEY
+    device_id = db.Column(db.String, nullable=False)  # device_id INTEGER NOT NULL
+    battery = db.Column(db.Numeric(5, 2), nullable=False)  # battery NUMERIC(5, 2) NOT NULL
+    temp = db.Column(db.Numeric(5, 2), nullable=False)  # temp NUMERIC(5, 2) NOT NULL
+    recorded_at = db.Column(db.DateTime, default=datetime.utcnow)  # recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    gps_id = db.Column(db.BigInteger, nullable=False)  # gps_id BIGINT NOT NULL
+
+    # สร้างความสัมพันธ์กับ GpsData
+    gps_data = db.relationship('gps_data', back_populates='device_data')
+
 
 @app.route('/api/register', methods=['POST'])
 def register():
@@ -234,8 +251,6 @@ def get_accessible_devices():
     device_ids = [device.device_id for device in devices]
 
     return jsonify({"device_ids": device_ids}), 200
-
-
 
 
 
@@ -452,6 +467,62 @@ def get_glasses_data():
             'status': 'error',
             'message': str(e)
         }), 500
+
+
+# chart site
+# API Route สำหรับดึงข้อมูล
+@app.route('/api/device_data', methods=['GET'])
+def get_device_data():
+    # Query ข้อมูลจาก device_data และ gps_data
+    data = db.session.query(
+        DeviceData.device_id,  # ดึง device_id จาก device_data
+        DeviceData.battery,    # ดึง battery
+        DeviceData.temp,       # ดึง temp
+        gps_data.device_id      # เชื่อมโยง device_id จาก gps_data
+    ).join(gps_data, DeviceData.gps_id == gps_data.id).all()
+
+    # แปลงข้อมูลให้อยู่ในรูปแบบ JSON
+    result = [
+        {
+            "device_id": row.device_id,
+            "battery": float(row.battery),
+            "temp": float(row.temp),
+        }
+        for row in data
+    ]
+
+    return jsonify(result)
+
+# add detail in device_data
+@app.route('/api/device_data', methods=['POST'])
+def add_device_data():
+    data = request.get_json()
+
+    # ตรวจสอบข้อมูลที่ส่งมาว่าครบถ้วนหรือไม่
+    if not all(key in data for key in ('device_id', 'battery', 'temp', 'gps_id')):
+        return jsonify({"error": "ข้อมูลไม่ครบถ้วน"}), 400
+
+    try:
+        # เพิ่มข้อมูลลงใน database
+        new_data = DeviceData(
+            device_id=data['device_id'],
+            battery=data['battery'],
+            temp=data['temp'],
+            gps_id=data['gps_id']
+        )
+        db.session.add(new_data)
+        db.session.commit()
+
+        return jsonify({"message": "เพิ่มข้อมูลสำเร็จ", "data": {
+            "device_id": new_data.device_id,
+            "battery": float(new_data.battery),
+            "temp": float(new_data.temp),
+            "gps_id": new_data.gps_id
+        }}), 201  # 201 Created
+
+    except Exception as e:
+        db.session.rollback()  # ยกเลิกการทำงานหากเกิดข้อผิดพลาด
+        return jsonify({"error": f"เกิดข้อผิดพลาด: {str(e)}"}), 500
 
 
 if __name__ == "__main__":
