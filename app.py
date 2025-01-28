@@ -49,7 +49,7 @@ class User(db.Model):
     role = db.Column(db.String(20), nullable=False)  # 'admin' หรือ 'user'
 
     # ความสัมพันธ์กับ gps_data (ผู้ใช้แต่ละคนสามารถมีหลายอุปกรณ์)
-    gps_records = db.relationship('GpsData', backref='user', cascade="all, delete", lazy=True)
+    gps_records = db.relationship('gps_data', backref='user', cascade="all, delete", lazy=True)
 
 # Model สำหรับพิกัด GPS
 class gps_data(db.Model):
