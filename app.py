@@ -431,21 +431,21 @@ def add_account():
 @app.route('/api/glasses-data', methods=['GET'])
 def get_glasses_data():
     try:
-        # ดึงข้อมูลล่าสุดของแต่ละ user จาก gps_data
+        # ดึงข้อมูล GPS ล่าสุดของแต่ละ user
         subquery = db.session.query(
             gps_data.user_id,
             db.func.max(gps_data.timestamp).label('max_timestamp')
         ).group_by(gps_data.user_id).subquery()
 
-        # Join กับตาราง users และข้อมูล GPS ล่าสุด
+        # Query ข้อมูลจาก users + GPS + DeviceStatus
         results = db.session.query(
             User.id,
             User.username,
             User.email,
             gps_data.latitude,
             gps_data.longitude,
-            # ในที่นี้สมมติว่าใช้ device_id เป็นค่าแบตเตอรี่ (คุณอาจต้องปรับตามโครงสร้างจริง)
-            gps_data.device_id.label('battery_level')
+            DeviceStatus.battery_level,
+            DeviceStatus.temperature
         ).join(
             subquery,
             User.id == subquery.c.user_id
@@ -455,17 +455,20 @@ def get_glasses_data():
                 gps_data.user_id == subquery.c.user_id,
                 gps_data.timestamp == subquery.c.max_timestamp
             )
+        ).outerjoin(  # ใช้ outerjoin เพราะบาง record อาจยังไม่มี device_status
+            DeviceStatus,
+            gps_data.id == DeviceStatus.gps_id
         ).all()
 
-        # แปลงผลลัพธ์เป็นรูปแบบที่ต้องการ
+        # แปลงข้อมูลเป็น JSON
         glasses_data = []
         for result in results:
             glasses_data.append({
                 'id': result.id,
                 'username': result.username,
                 'email': result.email,
-                # แปลง device_id เป็นค่าแบตเตอรี่ (ตัวอย่าง)
-                'battery': int(float(result.battery_level)) if result.battery_level.replace('.', '').isdigit() else 0,
+                'battery': result.battery_level if result.battery_level is not None else 0,  # กำหนดค่าเริ่มต้น
+                'temperature': result.temperature if result.temperature is not None else 0.0,
                 'location': f'Lat: {result.latitude}, Long: {result.longitude}'
             })
 
@@ -479,6 +482,7 @@ def get_glasses_data():
             'status': 'error',
             'message': str(e)
         }), 500
+
 
 
 if __name__ == "__main__":
