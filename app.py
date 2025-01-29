@@ -54,7 +54,7 @@ class User(db.Model):
 # Model สำหรับพิกัด GPS
 class gps_data(db.Model):
     __tablename__ = 'gps_data'
-    
+
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)  # ใช้ id เป็น PRIMARY KEY
     device_id = db.Column(db.String(50), nullable=False, index=True)  # เพิ่ม index เพื่อค้นหาเร็วขึ้น
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
@@ -121,7 +121,7 @@ def register():
 def admin():
     # ดึงข้อมูลของผู้ใช้ที่ล็อกอินจาก JWT Token
     current_user = get_jwt_identity()
-    
+
     # ตรวจสอบว่า role ของผู้ใช้เป็น admin หรือไม่
     if current_user["role"] != "admin":
         return jsonify({"message": "Access denied. Admins only."}), 403
@@ -157,7 +157,7 @@ def login():
         "role": user.role,
         "username": user.username,
     }), 200
-    
+
 
 
 # API endpoint to receive data
@@ -183,6 +183,7 @@ def receive_location():
             gps_entry.longitude = longitude
             gps_entry.timestamp = timestamp
         else:
+            # user_id ในทีนี้สำหรับการเพิ่มในตาราง gps_data (ถ้าเกิดว่าเป็นข้อมูล device_id ใหม่ใน gps_data)
             gps_entry = gps_data(device_id=device_id, user_id=user_id, latitude=latitude, longitude=longitude, timestamp=timestamp)
             db.session.add(gps_entry)
 
@@ -198,7 +199,7 @@ def receive_location():
 
         db.session.commit()
         return jsonify({"message": "GPS data and Device Status updated successfully"}), 201
-    
+
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
@@ -223,7 +224,7 @@ def get_latest_location_by_device_id(device_id):
         user_role = access.user.role
 
         # ดึงตำแหน่งล่าสุดจาก gps_data
-        latest_location = gps_data.query.get(device_id)  # ใช้ get() เพราะ device_id เป็น PRIMARY KEY
+        latest_location = gps_data.query.filter_by(device_id=device_id).order_by(gps_data.timestamp.desc()).first()
 
         if not latest_location:
             return jsonify({"message": "No data found for this device ID"}), 404
@@ -241,6 +242,7 @@ def get_latest_location_by_device_id(device_id):
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 
 ## API For Who you can search
@@ -481,5 +483,3 @@ def get_glasses_data():
 
 if __name__ == "__main__":
     app.run()
-
-
