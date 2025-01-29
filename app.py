@@ -183,14 +183,14 @@ def receive_location():
             gps_entry = gps_data(device_id=device_id, user_id=user_id, latitude=latitude, longitude=longitude, timestamp=timestamp)
             db.session.add(gps_entry)
 
-        # UPSERT: ถ้ามี device_id อยู่แล้วให้ update ค่าของ temperature และ battery ใน DeviceStatus
-        device_status = DeviceStatus.query.filter_by(device_id=device_id).first()
+        # UPSERT: ถ้ามี gps_id อยู่แล้วให้ update ค่าของ temperature และ battery ใน DeviceStatus
+        device_status = DeviceStatus.query.filter_by(gps_id=gps_entry.id).first()
         if device_status:
             device_status.temperature = temperature
             device_status.battery_level = battery_level
             device_status.timestamp = timestamp
         else:
-            device_status = DeviceStatus(device_id=device_id, temperature=temperature, battery_level=battery_level, timestamp=timestamp)
+            device_status = DeviceStatus(gps_id=gps_entry.id, temperature=temperature, battery_level=battery_level, timestamp=timestamp)
             db.session.add(device_status)
 
         db.session.commit()
