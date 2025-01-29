@@ -55,12 +55,26 @@ class User(db.Model):
 class gps_data(db.Model):
     __tablename__ = 'gps_data'
     
-    device_id = db.Column(db.String(50), primary_key=True)  # ใช้เป็น PRIMARY KEY
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)  # ใช้ id เป็น PRIMARY KEY
+    device_id = db.Column(db.String(50), nullable=False, index=True)  # เพิ่ม index เพื่อค้นหาเร็วขึ้น
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     latitude = db.Column(db.Float, nullable=False)
     longitude = db.Column(db.Float, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)  # เพิ่ม index
+
+    # เพิ่ม unique index เพื่อให้แต่ละอุปกรณ์มีเพียง 1 ข้อมูลล่าสุด ถ้าต้องการบันทึกเฉพาะค่าล่าสุด
+    __table_args__ = (
+        db.Index('idx_device_timestamp', device_id, timestamp.desc()),  # Index สำหรับการ query ค่าล่าสุด
+    )
+
+#Model Status device
+class DeviceStatus(db.Model):
+    __tablename__ = "device_status"
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    device_id = db.Column(db.String(50), db.ForeignKey("gps_data.device_id"), nullable=False)
+    temperature = db.Column(db.Float, nullable=False)
+    battery_level = db.Column(db.Integer, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    
 
 
 
@@ -148,39 +162,43 @@ def login():
 def receive_location():
     try:
         data = request.json
-        if not all(key in data for key in ('user_id', 'device_id', 'latitude', 'longitude')):
+        if not all(key in data for key in ('user_id', 'device_id', 'latitude', 'longitude', 'temperature', 'battery_level')):
             return jsonify({"message": "Missing required fields"}), 400
-        
+
+        device_id = data["device_id"]
+        user_id = data["user_id"]
+        latitude = data["latitude"]
+        longitude = data["longitude"]
+        temperature = data["temperature"]
+        battery_level = data["battery_level"]
         timestamp = datetime.utcnow()
 
-        # ตรวจสอบ user_device_access
-        user_device = UserDeviceAccess.query.filter_by(
-            user_id=data['user_id'], 
-            device_id=data['device_id']
-        ).first()
+        # UPSERT: ถ้ามี device_id อยู่แล้วให้ update ตำแหน่งใหม่ใน gps_data
+        gps_entry = gps_data.query.filter_by(device_id=device_id).first()
+        if gps_entry:
+            gps_entry.latitude = latitude
+            gps_entry.longitude = longitude
+            gps_entry.timestamp = timestamp
+        else:
+            gps_entry = gps_data(device_id=device_id, user_id=user_id, latitude=latitude, longitude=longitude, timestamp=timestamp)
+            db.session.add(gps_entry)
 
-        if not user_device:
-            user_device = UserDeviceAccess(
-                user_id=data['user_id'], 
-                device_id=data['device_id']
-            )
-            db.session.add(user_device)
+        # UPSERT: ถ้ามี device_id อยู่แล้วให้ update ค่าของ temperature และ battery ใน DeviceStatus
+        device_status = DeviceStatus.query.filter_by(device_id=device_id).first()
+        if device_status:
+            device_status.temperature = temperature
+            device_status.battery_level = battery_level
+            device_status.timestamp = timestamp
+        else:
+            device_status = DeviceStatus(device_id=device_id, temperature=temperature, battery_level=battery_level, timestamp=timestamp)
+            db.session.add(device_status)
 
-        # เพิ่มตำแหน่งใหม่
-        location = gps_data(
-            device_id=data['device_id'],
-            latitude=data['latitude'],
-            longitude=data['longitude'],
-            timestamp=timestamp,
-            user_id=data['user_id'],
-        )
-        db.session.add(location)
         db.session.commit()
-
-        return jsonify({"message": "Data received"}), 200
-
+        return jsonify({"message": "GPS data and Device Status updated successfully"}), 201
+    
     except Exception as e:
-        return jsonify({"message": f"An error occurred: {str(e)}"}), 500
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
 
 
 
