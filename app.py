@@ -71,10 +71,13 @@ class gps_data(db.Model):
 class DeviceStatus(db.Model):
     __tablename__ = "device_status"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    device_id = db.Column(db.String(50), db.ForeignKey("gps_data.device_id"), nullable=False)
+    gps_id = db.Column(db.Integer, db.ForeignKey("gps_data.id"), nullable=False)  # เชื่อมโยงกับ gps_data.id
     temperature = db.Column(db.Float, nullable=False)
     battery_level = db.Column(db.Integer, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # การเชื่อมโยงกลับไปยัง gps_data
+    gps_data = db.relationship("gps_data", backref=db.backref("device_status", uselist=False))
 
 
 
