@@ -303,27 +303,24 @@ def get_accounts():
         }), 500
 
 @app.route('/api/accounts/<int:id>', methods=['PUT'])
-@jwt_required()  # หากใช้ JWT, ยืนยันตัวตนผู้ใช้
+@jwt_required()
 def update_account(id):
     try:
-        # ดึงข้อมูลที่ส่งมาจากคำขอ (Request)
         data = request.get_json()
-
-        # ค้นหาผู้ใช้ที่ต้องการอัปเดตจากฐานข้อมูล
         user = User.query.get(id)
 
         if not user:
-            return jsonify({
-                "message": "User not found."
-            }), 404
+            return jsonify({"message": "User not found."}), 404
 
-        # อัปเดตข้อมูลผู้ใช้
+        # อัปเดตข้อมูลทั่วไป
         user.username = data.get('username', user.username)
         user.email = data.get('email', user.email)
-        user.password = data.get('password', user.password)
         user.role = data.get('role', user.role)
 
-        # บันทึกการเปลี่ยนแปลง
+        # ถ้ามีการส่ง password ใหม่มา ให้เข้ารหัสก่อนบันทึก
+        if 'password' in data and data['password']:
+            user.password = generate_password_hash(data['password'], method='pbkdf2:sha256')
+
         db.session.commit()
 
         return jsonify({
@@ -337,6 +334,7 @@ def update_account(id):
         }), 200
 
     except Exception as e:
+        db.session.rollback()
         return jsonify({
             "message": "Failed to update user.",
             "error": str(e)
