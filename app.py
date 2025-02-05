@@ -473,6 +473,25 @@ def get_glasses_data():
         }), 500
 
 
+# API สำหรับเพิ่ม Device
+@app.route('/api/devices/add', methods=['POST'])
+def add_device():
+    data = request.json  # รับข้อมูล JSON จาก client
+
+    # ดึงข้อมูลจาก JSON
+    user_id = data.get('userId')
+    device_id = data.get('deviceId')
+    device_name = data.get('deviceName')
+
+    # ตรวจสอบว่ามีข้อมูลครบหรือไม่
+    if user_id and device_id and device_name:
+        # สมมติว่ามีการบันทึกในฐานข้อมูลจริง (แค่ print ออกมา)
+        print(f"Device '{device_name}' (ID: {device_id}) added for User ID: {user_id}")
+        return jsonify({'status': 'success', 'message': 'Device added successfully'}), 200
+    else:
+        return jsonify({'status': 'error', 'message': 'Missing required fields'}), 400
+
+
 
 if __name__ == "__main__":
     app.run()
