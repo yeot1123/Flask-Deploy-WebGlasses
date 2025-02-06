@@ -34,6 +34,7 @@ class UserDeviceAccess(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     device_id = db.Column(db.String, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user = db.relationship('User', backref='device_access')
 
@@ -420,50 +421,47 @@ def add_account():
 @app.route('/api/glasses-data', methods=['GET'])
 def get_glasses_data():
     try:
-        # ดึงข้อมูล GPS ล่าสุดของแต่ละ user
-        subquery = db.session.query(
-            gps_data.user_id,
-            db.func.max(gps_data.timestamp).label('max_timestamp')
-        ).group_by(gps_data.user_id).subquery()
-
-        # Query ข้อมูลจาก users + GPS + DeviceStatus
+        # ดึงข้อมูล GPS ของทุก Device ของแต่ละ user
         results = db.session.query(
             User.id,
             User.username,
             User.email,
+            gps_data.device_id,  # เพิ่ม device_id
             gps_data.latitude,
             gps_data.longitude,
+            gps_data.timestamp,  # เก็บ timestamp ไว้ใช้เรียงข้อมูล
             DeviceStatus.battery_level,
             DeviceStatus.temperature
         ).join(
-            subquery,
-            User.id == subquery.c.user_id
-        ).join(
-            gps_data,
-            db.and_(
-                gps_data.user_id == subquery.c.user_id,
-                gps_data.timestamp == subquery.c.max_timestamp
-            )
-        ).outerjoin(  # ใช้ outerjoin เพราะบาง record อาจยังไม่มี device_status
-            DeviceStatus,
-            gps_data.id == DeviceStatus.gps_id
+            gps_data, User.id == gps_data.user_id
+        ).outerjoin(
+            DeviceStatus, gps_data.id == DeviceStatus.gps_id
+        ).order_by(
+            gps_data.user_id, gps_data.timestamp.desc()  # เรียงตาม user และเวลาล่าสุด
         ).all()
 
         # แปลงข้อมูลเป็น JSON
-        glasses_data = []
+        glasses_data = {}
         for result in results:
-            glasses_data.append({
-                'id': result.id,
-                'username': result.username,
-                'email': result.email,
-                'battery': result.battery_level if result.battery_level is not None else 0,  # กำหนดค่าเริ่มต้น
-                'temperature': result.temperature if result.temperature is not None else 0.0,
-                'location': f'Lat: {result.latitude}, Long: {result.longitude}'
+            user_id = result.id
+            if user_id not in glasses_data:
+                glasses_data[user_id] = {
+                    'id': user_id,
+                    'username': result.username,
+                    'email': result.email,
+                    'devices': []
+                }
+            
+            glasses_data[user_id]['devices'].append({
+                'device_id': result.device_id,
+                'location': f'Lat: {result.latitude}, Long: {result.longitude}',
+                'battery': result.battery_level if result.battery_level is not None else 0,
+                'temperature': result.temperature if result.temperature is not None else 0.0
             })
 
         return jsonify({
             'status': 'success',
-            'data': glasses_data
+            'data': list(glasses_data.values())
         }), 200
 
     except Exception as e:
@@ -473,7 +471,6 @@ def get_glasses_data():
         }), 500
 
 
-# API สำหรับเพิ่ม Device
 @app.route('/api/devices/add', methods=['POST'])
 def add_device():
     data = request.json  # รับข้อมูล JSON จาก client
@@ -481,13 +478,24 @@ def add_device():
     # ดึงข้อมูลจาก JSON
     user_id = data.get('userId')
     device_id = data.get('deviceId')
-    device_name = data.get('deviceName')
 
     # ตรวจสอบว่ามีข้อมูลครบหรือไม่
-    if user_id and device_id and device_name:
-        # สมมติว่ามีการบันทึกในฐานข้อมูลจริง (แค่ print ออกมา)
-        print(f"Device '{device_name}' (ID: {device_id}) added for User ID: {user_id}")
-        return jsonify({'status': 'success', 'message': 'Device added successfully'}), 200
+    if user_id and device_id:
+        # ตรวจสอบว่า user_id และ device_id ซ้ำกันในฐานข้อมูลหรือไม่
+        existing_access = UserDeviceAccess.query.filter_by(user_id=user_id, device_id=device_id).first()
+
+        if existing_access:
+            # ถ้ามีข้อมูลซ้ำ
+            return jsonify({'status': 'error', 'message': 'User ID and Device ID combination already exists'}), 400
+        else:
+            # ถ้าไม่มีข้อมูลซ้ำ
+            new_access = UserDeviceAccess(user_id=user_id, device_id=device_id)
+            db.session.add(new_access)
+            db.session.commit()
+
+            # บันทึกลงฐานข้อมูล (สมมติว่า print แทน)
+            print(f"User ID: {user_id} granted access to Device ID: {device_id} in user_device_access table.")
+            return jsonify({'status': 'success', 'message': 'Device access granted'}), 200
     else:
         return jsonify({'status': 'error', 'message': 'Missing required fields'}), 400
 
