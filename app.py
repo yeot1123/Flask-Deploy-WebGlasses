@@ -425,6 +425,7 @@ def add_account():
         }), 500
 
 
+# ดึง data สำหรับหน้า table
 @app.route('/api/glasses-data', methods=['GET'])
 def get_glasses_data():
     try:
