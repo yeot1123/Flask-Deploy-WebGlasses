@@ -271,28 +271,37 @@ def get_accessible_devices():
 @jwt_required()
 def get_accounts():
     try:
+        # current_user = get_jwt_identity()  # ดึงข้อมูลผู้ใช้ปัจจุบันจาก JWT
         users = User.query.all()  # ดึงข้อมูลทั้งหมดจากตาราง User
 
         if not users:
-            return jsonify({"message": "No users found."}), 404
+            # ถ้าไม่มีผู้ใช้ในฐานข้อมูล
+            return jsonify({
+                "message": "No users found."
+            }), 404
 
-        # ฟังก์ชันแปลงรหัสผ่านให้แสดงแบบเข้าใจง่าย
-        def mask_password(hashed_password):
-            return hashed_password[:10] + "..." if len(hashed_password) > 10 else hashed_password
-
-        # สร้างรายการผู้ใช้โดยซ่อนรหัสผ่านบางส่วน
+        # สร้างรายการผู้ใช้
         result = [{
             "id": user.id,
             "username": user.username,
             "email": user.email,
-            "password": mask_password(user.password),  # ใช้ฟังก์ชัน mask_password()
+            "password": user.password,
             "role": user.role
         } for user in users]
 
-        return jsonify({"accounts": result}), 200
+        # ส่งผลลัพธ์กลับ
+        return jsonify({
+            # "message": "Successfully retrieved users.",
+            # "current_user": current_user,
+            "accounts": result
+        }), 200
 
     except Exception as e:
-        return jsonify({"message": "Failed to retrieve users.", "error": str(e)}), 500
+        # หากเกิดข้อผิดพลาดในการดึงข้อมูล
+        return jsonify({
+            "message": "Failed to retrieve users.",
+            "error": str(e)
+        }), 500
 
 @app.route('/api/accounts/<int:id>', methods=['PUT'])
 @jwt_required()
