@@ -425,17 +425,16 @@ def add_account():
         }), 500
 
 
-# หน้า TABLE For ADMIN
 @app.route('/api/glasses-data', methods=['GET'])
 def get_glasses_data():
     try:
-        # ดึงข้อมูล GPS ล่าสุดของแต่ละ user
+        # ดึง GPS ล่าสุดของแต่ละ user
         subquery = db.session.query(
             gps_data.user_id,
             db.func.max(gps_data.timestamp).label('max_timestamp')
         ).group_by(gps_data.user_id).subquery()
 
-        # Query ข้อมูลจาก users + GPS + DeviceStatus
+        # Query ข้อมูล users + GPS + DeviceStatus
         results = db.session.query(
             User.id,
             User.username,
@@ -444,42 +443,29 @@ def get_glasses_data():
             gps_data.longitude,
             DeviceStatus.battery_level,
             DeviceStatus.temperature
-        ).join(
-            subquery,
-            User.id == subquery.c.user_id
-        ).join(
-            gps_data,
-            db.and_(
-                gps_data.user_id == subquery.c.user_id,
-                gps_data.timestamp == subquery.c.max_timestamp
-            )
-        ).outerjoin(  # ใช้ outerjoin เพราะบาง record อาจยังไม่มี device_status
-            DeviceStatus,
-            gps_data.id == DeviceStatus.gps_id
-        ).all()
+        ).join(subquery, User.id == subquery.c.user_id) \
+         .join(gps_data, db.and_(gps_data.user_id == subquery.c.user_id,
+                                 gps_data.timestamp == subquery.c.max_timestamp)) \
+         .outerjoin(DeviceStatus, gps_data.id == DeviceStatus.gps_id) \
+         .order_by(User.id) \
+         .all()
 
         # แปลงข้อมูลเป็น JSON
-        glasses_data = []
-        for result in results:
-            glasses_data.append({
-                'id': result.id,
-                'username': result.username,
-                'email': result.email,
-                'battery': result.battery_level if result.battery_level is not None else 0,  # กำหนดค่าเริ่มต้น
-                'temperature': result.temperature if result.temperature is not None else 0.0,
-                'location': f'Lat: {result.latitude}, Long: {result.longitude}'
-            })
+        glasses_data = [{
+            'id': result.id,
+            'username': result.username,
+            'email': result.email,
+            'battery': result.battery_level or 0,  # กำหนดค่าเริ่มต้น
+            'temperature': result.temperature or 0.0,
+            'latitude': result.latitude,
+            'longitude': result.longitude
+        } for result in results]
 
-        return jsonify({
-            'status': 'success',
-            'data': glasses_data
-        }), 200
+        return jsonify({'status': 'success', 'data': glasses_data}), 200
 
     except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 
 
