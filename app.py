@@ -34,6 +34,7 @@ class UserDeviceAccess(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     device_id = db.Column(db.String, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)  # ✅ เพิ่ม created_at
 
     user = db.relationship('User', backref='device_access')
 
@@ -468,6 +469,113 @@ def get_glasses_data():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+
+        # ดึง data สำหรับหน้า device
+@app.route('/api/devices-data', methods=['GET'])
+def get_devices_data():
+    try:
+        # Query ยังคงเหมือนเดิม
+        results = db.session.query(
+            UserDeviceAccess.id,
+            UserDeviceAccess.user_id,
+            UserDeviceAccess.device_id,
+            UserDeviceAccess.created_at,
+            User.username,
+            User.email
+        ).join(User, UserDeviceAccess.user_id == User.id) \
+         .order_by(UserDeviceAccess.id) \
+         .distinct()  \
+         .all()
+
+        devices_data = []
+        seen = set()
+
+        for result in results:
+            key = (result.user_id, result.device_id)
+            if key not in seen:
+                seen.add(key)
+                # แก้การ format วันที่ตรงนี้
+                formatted_date = result.created_at.strftime('%d/%m/%Y %H:%M:%S')
+                devices_data.append({
+                    'id': result.id,
+                    'user_id': result.user_id,
+                    'device_id': result.device_id,
+                    'created_at': formatted_date,  # ส่งวันที่ที่ format แล้ว
+                    'username': result.username,
+                    'email': result.email
+                })
+
+        return jsonify({'status': 'success', 'data': devices_data}), 200
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+        
+
+@app.route('/api/devices', methods=['POST'])
+def add_device():
+        data = request.json  # รับข้อมูล JSON จาก client
+
+        # ดึงข้อมูลจาก JSON
+        user_id = data.get('userId')
+        device_id = data.get('deviceId')
+
+        # ตรวจสอบว่ามีข้อมูลครบหรือไม่
+        if user_id and device_id:
+            # ตรวจสอบว่า user_id และ device_id ซ้ำกันในฐานข้อมูลหรือไม่
+            existing_access = UserDeviceAccess.query.filter_by(user_id=user_id, device_id=device_id).first()
+
+            if existing_access:
+                # ถ้ามีข้อมูลซ้ำ
+                return jsonify({'status': 'error', 'message': 'User ID and Device ID combination already exists'}), 400
+            else:
+                # ถ้าไม่มีข้อมูลซ้ำ
+                new_access = UserDeviceAccess(user_id=user_id, device_id=device_id)
+                db.session.add(new_access)
+                db.session.commit()
+
+                # บันทึกลงฐานข้อมูล (สมมติว่า print แทน)
+                print(f"User ID: {user_id} granted access to Device ID: {device_id} in user_device_access table.")
+                return jsonify({'status': 'success', 'message': 'Device access granted'}), 200
+        else:
+            return jsonify({'status': 'error', 'message': 'Missing required fields'}), 400
+
+
+@app.route('/api/devices/<int:access_id>', methods=['DELETE'])
+def delete_device_access(access_id):
+        try:
+            # ค้นหาข้อมูลจาก id
+            device_access = UserDeviceAccess.query.get(access_id)
+            
+            # ถ้าไม่พบข้อมูล
+            if not device_access:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Device access record not found'
+                }), 404
+                
+            # เก็บข้อมูลไว้แสดงใน log
+            user_id = device_access.user_id
+            device_id = device_access.device_id
+            
+            # ลบข้อมูล
+            db.session.delete(device_access)
+            db.session.commit()
+            
+            # บันทึก log
+            print(f"Deleted access - User ID: {user_id}, Device ID: {device_id}")
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'Device access deleted successfully'
+            }), 200
+            
+        except Exception as e:
+            # ถ้าเกิดข้อผิดพลาด rollback การทำงาน
+            db.session.rollback()
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to delete device access: {str(e)}'
+            }), 500
 
 
 if __name__ == "__main__":
