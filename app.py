@@ -469,6 +469,81 @@ def get_glasses_data():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+@app.route('/api/glasses-data2/<int:gps_id>', methods=['GET'])
+def get_glasses_data_by_id(gps_id):
+    try:
+        # ตรวจสอบว่า GPS ID มีอยู่จริงหรือไม่
+        device_access = DeviceStatus.query.filter_by(gps_id=gps_id).first()
+        if not device_access:
+            return jsonify({'status': 'error', 'message': 'GPS ID not found'}), 404
+
+        # ดึง GPS ล่าสุดของผู้ใช้แต่ละ ID
+        latest_gps_subquery = db.session.query(
+            gps_data.user_id,
+            gps_data.id.label('gps_id'),
+            db.func.max(gps_data.timestamp).label('max_timestamp')
+        ).group_by(gps_data.user_id, gps_data.id).subquery()
+
+        # Query ข้อมูลหลัก (Users + GPS + DeviceStatus)
+        results = db.session.query(
+            User.id,
+            User.username,
+            DeviceStatus.gps_id,
+            db.func.max(DeviceStatus.battery_level).label("battery_level"),
+            db.func.max(DeviceStatus.temperature).label("temperature"),
+            db.func.max(gps_data.timestamp).label("latest_timestamp")
+        ).select_from(User) \
+         .join(latest_gps_subquery, User.id == latest_gps_subquery.c.user_id) \
+         .join(gps_data, gps_data.id == latest_gps_subquery.c.gps_id) \
+         .outerjoin(DeviceStatus, gps_data.id == DeviceStatus.gps_id) \
+         .filter(DeviceStatus.gps_id == gps_id) \
+         .group_by(User.id, User.username, DeviceStatus.gps_id) \
+         .all()
+
+        # ดึงข้อมูลทั้งหมดของ GPS ID นั้น
+        all_results = db.session.query(
+            User.id,
+            User.username,
+            DeviceStatus.gps_id,
+            DeviceStatus.battery_level,
+            DeviceStatus.temperature,
+            gps_data.timestamp.label("timestamp")
+        ).select_from(User) \
+         .join(gps_data, User.id == gps_data.user_id) \
+         .outerjoin(DeviceStatus, gps_data.id == DeviceStatus.gps_id) \
+         .filter(DeviceStatus.gps_id == gps_id) \
+         .order_by(gps_data.timestamp.desc()).all()
+
+        # จัดกลุ่มข้อมูล
+        data_dict = {}
+        for result in results:
+            key = (result.username, result.gps_id)
+            data_dict[key] = {
+                'id': result.id,
+                'username': result.username,
+                'gps_ID': result.gps_id,
+                'battery': result.battery_level or 0,
+                'temperature': result.temperature or 0.0,
+                'latest_timestamp': result.latest_timestamp,
+                'sub_data': []
+            }
+
+        # ใส่ข้อมูลที่เหลือเป็น sub_data
+        for item in all_results:
+            key = (item.username, item.gps_id)
+            if key in data_dict and item.timestamp < data_dict[key]['latest_timestamp']:
+                data_dict[key]['sub_data'].append({
+                    'battery': item.battery_level or 0,
+                    'temperature': item.temperature or 0.0,
+                    'timestamp': item.timestamp
+                })
+
+        return jsonify({'status': 'success', 'data': list(data_dict.values())}), 200
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 
         # ดึง data สำหรับหน้า device
 @app.route('/api/devices-data', methods=['GET'])
