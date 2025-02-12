@@ -469,76 +469,69 @@ def get_glasses_data():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-@app.route('/api/glasses-data2/<int:gps_id>', methods=['GET'])
+
+@app.route('/api/gps-ids', methods=['GET'])
+def get_all_gps_ids():
+    try:
+        # ดึง gps_id และ device_id ทั้งหมดจากฐานข้อมูล
+        gps_ids = db.session.query(DeviceStatus.gps_id, gps_data.device_id).join(
+            gps_data, gps_data.id == DeviceStatus.gps_id
+        ).distinct().all()
+
+        if not gps_ids:
+            return jsonify({'status': 'error', 'message': 'No GPS IDs found'}), 404
+
+        # แปลงข้อมูลให้เป็น list ของ dicts
+        gps_ids_list = [{'gps_id': gps_id[0], 'device_id': gps_id[1]} for gps_id in gps_ids]
+
+        return jsonify({'status': 'success', 'gps_ids': gps_ids_list}), 200
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+
+@app.route('/api/gps-ids/data/<int:gps_id>', methods=['GET'])
 def get_glasses_data_by_id(gps_id):
     try:
-        # ตรวจสอบว่า GPS ID มีอยู่จริงหรือไม่
-        device_access = DeviceStatus.query.filter_by(gps_id=gps_id).first()
-        if not device_access:
-            return jsonify({'status': 'error', 'message': 'GPS ID not found'}), 404
-
-        # ดึง GPS ล่าสุดของผู้ใช้แต่ละ ID
-        latest_gps_subquery = db.session.query(
-            gps_data.user_id,
-            gps_data.id.label('gps_id'),
-            db.func.max(gps_data.timestamp).label('max_timestamp')
-        ).group_by(gps_data.user_id, gps_data.id).subquery()
-
-        # Query ข้อมูลหลัก (Users + GPS + DeviceStatus)
-        results = db.session.query(
-            User.id,
-            User.username,
-            DeviceStatus.gps_id,
-            db.func.max(DeviceStatus.battery_level).label("battery_level"),
-            db.func.max(DeviceStatus.temperature).label("temperature"),
-            db.func.max(gps_data.timestamp).label("latest_timestamp")
-        ).select_from(User) \
-         .join(latest_gps_subquery, User.id == latest_gps_subquery.c.user_id) \
-         .join(gps_data, gps_data.id == latest_gps_subquery.c.gps_id) \
-         .outerjoin(DeviceStatus, gps_data.id == DeviceStatus.gps_id) \
-         .filter(DeviceStatus.gps_id == gps_id) \
-         .group_by(User.id, User.username, DeviceStatus.gps_id) \
-         .all()
-
-        # ดึงข้อมูลทั้งหมดของ GPS ID นั้น
-        all_results = db.session.query(
-            User.id,
-            User.username,
+        # ดึงข้อมูลทั้งหมดของ GPS ID ที่ตรงกับ gps_id ที่ส่งมา
+        records = db.session.query(
+            gps_data.id,
+            gps_data.device_id,
             DeviceStatus.gps_id,
             DeviceStatus.battery_level,
             DeviceStatus.temperature,
-            gps_data.timestamp.label("timestamp")
-        ).select_from(User) \
-         .join(gps_data, User.id == gps_data.user_id) \
-         .outerjoin(DeviceStatus, gps_data.id == DeviceStatus.gps_id) \
-         .filter(DeviceStatus.gps_id == gps_id) \
-         .order_by(gps_data.timestamp.desc()).all()
+            DeviceStatus.timestamp
+        ).join(
+            DeviceStatus, DeviceStatus.gps_id == gps_data.id  # เชื่อมโยง gps_id
+        ).filter(
+            DeviceStatus.gps_id == gps_id  # กรองให้ gps_id ตรง
+        ).order_by(DeviceStatus.timestamp.desc()).all()
 
-        # จัดกลุ่มข้อมูล
-        data_dict = {}
-        for result in results:
-            key = (result.username, result.gps_id)
-            data_dict[key] = {
-                'id': result.id,
-                'username': result.username,
-                'gps_ID': result.gps_id,
-                'battery': result.battery_level or 0,
-                'temperature': result.temperature or 0.0,
-                'latest_timestamp': result.latest_timestamp,
-                'sub_data': []
-            }
+        if not records:
+            return jsonify({'status': 'error', 'message': 'GPS ID not found'}), 404
 
-        # ใส่ข้อมูลที่เหลือเป็น sub_data
-        for item in all_results:
-            key = (item.username, item.gps_id)
-            if key in data_dict and item.timestamp < data_dict[key]['latest_timestamp']:
-                data_dict[key]['sub_data'].append({
-                    'battery': item.battery_level or 0,
-                    'temperature': item.temperature or 0.0,
-                    'timestamp': item.timestamp
-                })
+        # จัดรูปแบบข้อมูล
+        data = {
+            'gps_id': gps_id,
+            'latest_record': {
+                'device_id': records[0].device_id,  # ใช้ device_id จาก record ล่าสุด
+                'battery_level': records[0].battery_level,
+                'temperature': records[0].temperature,
+                'timestamp': records[0].timestamp
+            },
+            'history': [
+                {
+                    'device_id': rec.device_id,  # ใช้ device_id จาก record
+                    'battery_level': rec.battery_level,
+                    'temperature': rec.temperature,
+                    'timestamp': rec.timestamp
+                }
+                for rec in records[1:]  # ข้าม record ล่าสุด
+            ]
+        }
 
-        return jsonify({'status': 'success', 'data': list(data_dict.values())}), 200
+        return jsonify({'status': 'success', 'data': data}), 200
 
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
