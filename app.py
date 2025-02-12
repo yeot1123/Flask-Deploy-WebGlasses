@@ -426,17 +426,22 @@ def add_account():
         }), 500
 
 
-# ดึง data สำหรับหน้า table
 @app.route('/api/glasses-data', methods=['GET'])
 def get_glasses_data():
     try:
         # ดึง GPS ล่าสุดของแต่ละ user
-        subquery = db.session.query(
+        subquery_gps = db.session.query(
             gps_data.user_id,
             db.func.max(gps_data.timestamp).label('max_timestamp')
         ).group_by(gps_data.user_id).subquery()
 
-        # Query ข้อมูล users + GPS + DeviceStatus
+        # ดึง DeviceStatus ล่าสุดของแต่ละ GPS
+        subquery_device = db.session.query(
+            DeviceStatus.gps_id,
+            db.func.max(DeviceStatus.timestamp).label('max_device_timestamp')
+        ).group_by(DeviceStatus.gps_id).subquery()
+
+        # Query ข้อมูล Users + GPS + DeviceStatus (เฉพาะอันล่าสุด)
         results = db.session.query(
             User.id,
             User.username,
@@ -445,10 +450,16 @@ def get_glasses_data():
             gps_data.longitude,
             DeviceStatus.battery_level,
             DeviceStatus.temperature
-        ).join(subquery, User.id == subquery.c.user_id) \
-         .join(gps_data, db.and_(gps_data.user_id == subquery.c.user_id,
-                                 gps_data.timestamp == subquery.c.max_timestamp)) \
-         .outerjoin(DeviceStatus, gps_data.id == DeviceStatus.gps_id) \
+        ).join(subquery_gps, User.id == subquery_gps.c.user_id) \
+         .join(gps_data, db.and_(
+             gps_data.user_id == subquery_gps.c.user_id,
+             gps_data.timestamp == subquery_gps.c.max_timestamp
+         )) \
+         .outerjoin(subquery_device, gps_data.id == subquery_device.c.gps_id) \
+         .outerjoin(DeviceStatus, db.and_(
+             DeviceStatus.gps_id == gps_data.id,
+             DeviceStatus.timestamp == subquery_device.c.max_device_timestamp
+         )) \
          .order_by(User.id) \
          .all()
 
